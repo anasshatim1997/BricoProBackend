@@ -1,0 +1,80 @@
+spring:
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 20000
+      idle-timeout: 300000
+      max-lifetime: 900000
+      leak-detection-threshold: 60000
+
+  jpa:
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+        jdbc:
+          batch_size: 50
+
+  flyway:
+    clean-on-validation-error: false
+    out-of-order: false
+    validate-on-migrate: true
+
+app:
+  jwt:
+    secret: ${JWT_SECRET}
+    access-token-expiration-ms: 900000
+    refresh-token-expiration-ms: 604800000
+
+  upload:
+    # REQUIRED in prod — set both env vars in your .env or systemd service file:
+    #   UPLOAD_BASE_DIR=/var/bricopro/uploads
+    #   APP_BASE_URL=https://api.bricopro.ma
+    #
+    # Server setup commands (run once):
+    #   sudo mkdir -p /var/bricopro/uploads
+    #   sudo chown -R bricopro:bricopro /var/bricopro/uploads
+    #   sudo chmod 750 /var/bricopro/uploads
+    base-dir: ${UPLOAD_BASE_DIR}
+    base-url: ${APP_BASE_URL}
+
+server:
+  port: ${SERVER_PORT:8080}
+  forward-headers-strategy: framework
+  tomcat:
+    max-threads: 200
+    accept-count: 100
+    connection-timeout: 20000
+
+springdoc:
+  swagger-ui:
+    enabled: false
+  api-docs:
+    enabled: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+
+logging:
+  level:
+    com.BricoPro: WARN
+    org.springframework.security: WARN
+    org.flywaydb: INFO
+    org.hibernate.SQL: ERROR
+  file:
+    name: /var/log/bricopro/app.log
+  logback:
+    rollingpolicy:
+      max-file-size: 50MB
+      max-history: 30
+      total-size-cap: 1GB

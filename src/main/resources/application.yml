@@ -1,0 +1,170 @@
+spring:
+  application:
+    name: BricoPro
+
+
+  profiles:
+    active: ${APP_ENV:dev}
+
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+      minimum-idle: 2
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: false
+        jdbc:
+          batch_size: 20
+        order_inserts: true
+        order_updates: true
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    validate-on-migrate: true
+    out-of-order: false
+
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET}
+            scope: openid,profile,email
+            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
+          facebook:
+            client-id: ${FACEBOOK_CLIENT_ID}
+            client-secret: ${FACEBOOK_CLIENT_SECRET}
+            scope: email,public_profile
+            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
+
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
+      mail.smtp.connectiontimeout: 5000
+      mail.smtp.timeout: 5000
+
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 5MB
+      max-request-size: 10MB
+
+  cache:
+    type: caffeine
+    caffeine:
+      spec: maximumSize=500,expireAfterWrite=300s
+
+# ── JWT ────────────────────────────────────────────────────────
+app:
+  jwt:
+    secret: ${JWT_SECRET}
+    access-token-expiration-ms: ${JWT_ACCESS_EXP_MS:900000}
+    refresh-token-expiration-ms: ${JWT_REFRESH_EXP_MS:604800000}
+
+  # ── File storage ─────────────────────────────────────────────
+  upload:
+    base-dir: ${UPLOAD_BASE_DIR:/var/bricopro/uploads}
+    base-url: ${APP_BASE_URL:http://localhost:8080}
+
+  # ── CORS allowed origins, comma-separated ─────────────────────
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
+
+  # ── First-boot admin account, created only if app.admin.email is set
+  #    and no ADMIN user already exists — see AdminBootstrapRunner ──
+  admin:
+    email: ${ADMIN_EMAIL:}
+    password: ${ADMIN_PASSWORD:}
+
+  # ── WhatsApp via Green API (free tier — 1500 msg/month) ──────
+  # Sign up at https://green-api.com, connect your WhatsApp number
+  # and paste the idInstance and apiTokenInstance below
+  greenapi:
+    instance-id: ${GREENAPI_INSTANCE_ID:}
+    token: ${GREENAPI_TOKEN:}
+
+  whatsapp:
+    enabled: ${WHATSAPP_ENABLED:false}
+
+  # ── Firebase Cloud Messaging push notifications (free) ───────
+  # Get the server key from Firebase Console -> Project Settings -> Cloud Messaging
+  fcm:
+    server-key: ${FCM_SERVER_KEY:}
+
+  # ── Mail sender display address ───────────────────────────────
+  mail:
+    from: ${MAIL_USERNAME:noreply@bricopro.ma}
+
+# ── Server ─────────────────────────────────────────────────────
+server:
+  port: ${SERVER_PORT:8080}
+  servlet:
+    context-path: /
+  compression:
+    enabled: true
+    mime-types: application/json,application/xml,text/html,image/jpeg,image/png
+    min-response-size: 1024
+
+# ── Actuator ───────────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+
+# ── SpringDoc / Swagger ────────────────────────────────────────
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+    display-request-duration: true
+  api-docs:
+    path: /v3/api-docs
+
+
+ocr:
+  tessdata-path: ${TESSDATA_PATH:/usr/share/tesseract-ocr/5/tessdata}
+  language: ${OCR_LANGUAGE:fra}
+
+
+payment:
+  cmi:
+    client-id: ${PAYMENT_CMI_CLIENT_ID:}
+    store-key: ${PAYMENT_CMI_STORE_KEY:}
+    callback-url: ${PAYMENT_CMI_CALLBACK_URL:}
+    ok-url: ${PAYMENT_CMI_OK_URL:}
+    fail-url: ${PAYMENT_CMI_FAIL_URL:}
+    test-mode: ${PAYMENT_CMI_TEST_MODE:true}
+
+
+logging:
+  level:
+    org.hibernate.SQL: OFF
+    org.hibernate.type.descriptor.sql.BasicBinder: OFF
+    org.springframework.orm.jpa: WARN
+    org.springframework.transaction: WARN

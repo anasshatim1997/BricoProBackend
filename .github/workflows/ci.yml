@@ -1,0 +1,176 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.3
+        env:
+          MYSQL_ROOT_PASSWORD: test_root_password
+          MYSQL_DATABASE: bricopro_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -uroot -ptest_root_password"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+
+      - name: Grant execute permission to mvnw
+        run: chmod +x mvnw
+
+      - name: Wait for MySQL to be ready
+        run: |
+          for i in $(seq 1 30); do
+            mysqladmin ping -h 127.0.0.1 -P 3306 -uroot -ptest_root_password && break
+            echo "Waiting for MySQL... ($i/30)"
+            sleep 2
+          done
+
+      - name: Run unit and integration tests
+        env:
+          SPRING_PROFILES_ACTIVE: test
+          DB_USERNAME: root
+          DB_PASSWORD: test_root_password
+          SPRING_DATA_REDIS_HOST: 127.0.0.1
+          SPRING_DATA_REDIS_PORT: 6379
+        run: ./mvnw -B test
+
+      - name: Publish test report
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: Maven Test Report
+          path: "target/surefire-reports/*.xml"
+          reporter: java-junit
+          fail-on-error: false
+
+      - name: Upload surefire reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: target/surefire-reports/
+          retention-days: 5
+
+      - name: Build application jar
+        env:
+          SPRING_PROFILES_ACTIVE: test
+        run: ./mvnw -B package -DskipTests
+
+      - name: Upload built jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-jar
+          path: target/*.jar
+          retention-days: 5
+
+  docker-build-and-verify:
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create minimal .env for docker-compose
+        run: |
+          cat > .env << 'ENVEOF'
+          APP_ENV=ci
+          SERVER_PORT=8080
+          DB_URL=jdbc:mysql://db:3306/bricopro_dev?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
+          DB_USERNAME=root
+          DB_PASSWORD=ci_test_password
+          DB_POOL_SIZE=5
+          JWT_SECRET=Y2ktb25seS1zZWNyZXQta2V5LWZvci1kb2NrZXItYnVpbGQtdmVyaWZpY2F0aW9uLW9ubHk=
+          JWT_ACCESS_EXP_MS=900000
+          JWT_REFRESH_EXP_MS=604800000
+          CORS_ALLOWED_ORIGINS=http://localhost:3000
+          GOOGLE_CLIENT_ID=ci-placeholder
+          GOOGLE_CLIENT_SECRET=ci-placeholder
+          FACEBOOK_CLIENT_ID=ci-placeholder
+          FACEBOOK_CLIENT_SECRET=ci-placeholder
+          MAIL_HOST=smtp.gmail.com
+          MAIL_PORT=587
+          MAIL_USERNAME=ci@bricopro.ma
+          MAIL_PASSWORD=ci-placeholder
+          UPLOAD_BASE_DIR=/app/uploads
+          WHATSAPP_ENABLED=false
+          FCM_SERVER_KEY=
+          PAYMENT_CMI_TEST_MODE=true
+          TESSDATA_PATH=/usr/share/tesseract-ocr/5/tessdata
+          OCR_LANGUAGE=fra
+          APP_OAUTH2_REDIRECT_URI=brico://oauth2/callback
+          ENVEOF
+
+      - name: Build and start the full stack
+        run: docker compose up --build -d
+
+      - name: Wait for the app container to report healthy
+        run: |
+          echo "Waiting for the app to become reachable on :8080..."
+          for i in $(seq 1 60); do
+            status=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/actuator/health || echo "000")
+            if [ "$status" = "200" ]; then
+              echo "App is up (attempt $i)"
+              break
+            fi
+            echo "Attempt $i/60: got HTTP $status, retrying in 5s..."
+            sleep 5
+          done
+
+      - name: Verify /actuator/health reports UP
+        run: |
+          response=$(curl -s http://localhost:8080/actuator/health)
+          echo "Health response: $response"
+          echo "$response" | grep -q '"status":"UP"' || (echo "Health check did not report UP" && exit 1)
+
+      - name: Verify Swagger UI is reachable
+        run: |
+          status=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/swagger-ui/index.html)
+          echo "Swagger UI HTTP status: $status"
+          [ "$status" = "200" ] || (echo "Swagger UI not reachable" && exit 1)
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: |
+          echo "── db logs ──────────────────────────────"
+          docker compose logs db || true
+          echo "── redis logs ───────────────────────────"
+          docker compose logs redis || true
+          echo "── app logs ─────────────────────────────"
+          docker compose logs app || true
+
+      - name: Tear down the stack
+        if: always()
+        run: docker compose down -v

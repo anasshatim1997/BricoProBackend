@@ -1,0 +1,143 @@
+name: CD
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+
+jobs:
+  publish-image:
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'push' ||
+      github.event.workflow_run.conclusion == 'success'
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+
+      - name: Grant execute permission to mvnw
+        run: chmod +x mvnw
+
+      - name: Build application jar
+        run: ./mvnw -B package -DskipTests
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=sha-,format=short
+            type=semver,pattern={{version}}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Verify the published image starts and reports healthy
+        run: |
+          docker network create bricopro-verify-net
+
+          docker run -d --name verify-mysql --network bricopro-verify-net \
+            -e MYSQL_ROOT_PASSWORD=verify_password \
+            -e MYSQL_DATABASE=bricopro_dev \
+            mysql:8.3
+
+          docker run -d --name verify-redis --network bricopro-verify-net redis:7-alpine
+
+          echo "Waiting for MySQL to accept connections..."
+          for i in $(seq 1 30); do
+            docker exec verify-mysql mysqladmin ping -h localhost -uroot -pverify_password && break
+            sleep 2
+          done
+
+          IMAGE_TAG=$(echo '${{ steps.meta.outputs.tags }}' | head -n1)
+
+          docker run -d --name verify-app --network bricopro-verify-net \
+            -e DB_URL="jdbc:mysql://verify-mysql:3306/bricopro_dev?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true" \
+            -e DB_USERNAME=root \
+            -e DB_PASSWORD=verify_password \
+            -e SPRING_DATA_REDIS_HOST=verify-redis \
+            -e JWT_SECRET="dmVyaWZpY2F0aW9uLW9ubHktc2VjcmV0LWtleS1kby1ub3QtdXNlLWluLXByb2Q=" \
+            -e GOOGLE_CLIENT_ID=verify-placeholder \
+            -e GOOGLE_CLIENT_SECRET=verify-placeholder \
+            -e FACEBOOK_CLIENT_ID=verify-placeholder \
+            -e FACEBOOK_CLIENT_SECRET=verify-placeholder \
+            -e MAIL_PASSWORD=verify-placeholder \
+            -p 8080:8080 \
+            "$IMAGE_TAG"
+
+          echo "Waiting for the published image's app container to become healthy..."
+          for i in $(seq 1 60); do
+            status=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/actuator/health || echo "000")
+            if [ "$status" = "200" ]; then
+              echo "Published image is healthy (attempt $i)"
+              break
+            fi
+            echo "Attempt $i/60: got HTTP $status, retrying in 5s..."
+            sleep 5
+          done
+
+          response=$(curl -s http://localhost:8080/actuator/health)
+          echo "Health response: $response"
+          echo "$response" | grep -q '"status":"UP"' || (docker logs verify-app && exit 1)
+
+      - name: Dump verification container logs on failure
+        if: failure()
+        run: |
+          docker logs verify-app || true
+          docker logs verify-mysql || true
+          docker logs verify-redis || true
+
+      - name: Clean up verification containers
+        if: always()
+        run: |
+          docker rm -f verify-app verify-mysql verify-redis || true
+          docker network rm bricopro-verify-net || true
+
+      - name: Summary
+        run: |
+          echo "### Image published :package:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo '${{ steps.meta.outputs.tags }}' | while read -r tag; do
+            echo "- \`$tag\`" >> $GITHUB_STEP_SUMMARY
+          done
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "No deployment target is configured yet — this pipeline stops at publishing a verified image to GHCR. Once a real server exists, add a deployment job here (e.g. SSH into the VPS and pull the new tag, or trigger a webhook)." >> $GITHUB_STEP_SUMMARY

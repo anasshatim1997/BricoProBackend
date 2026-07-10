@@ -1,0 +1,2 @@
+ALTER TABLE bid ADD COLUMN parent_bid_id BIGINT;
+ALTER TABLE bid ADD CONSTRAINT fk_bid_parent FOREIGN KEY (parent_bid_id) REFERENCES bid(id) ON DELETE SET NULL;

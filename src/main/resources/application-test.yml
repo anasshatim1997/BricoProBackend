@@ -1,0 +1,47 @@
+# ╔══════════════════════════════════════════════════════════════╗
+# ║  PROFILE: test                                              ║
+# ║  CI / integration tests — isolated DB, no external calls    ║
+# ╚══════════════════════════════════════════════════════════════╝
+
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/bricopro_test?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:1234}
+    hikari:
+      maximum-pool-size: 3
+
+  jpa:
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+
+  flyway:
+    clean-on-validation-error: true   # wipe & rebuild schema on each test run
+    out-of-order: true
+
+  # Disable mail completely in tests
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.mail.MailSenderAutoConfiguration
+
+app:
+  jwt:
+    secret: dGVzdC1zZWNyZXQta2V5LWZvci1icmljb3Byby10ZXN0aW5nLW9ubHk=
+    access-token-expiration-ms: 60000      # 1 min — fast expiry tests
+    refresh-token-expiration-ms: 120000    # 2 min
+
+server:
+  port: 8081
+
+springdoc:
+  swagger-ui:
+    enabled: false
+
+logging:
+  level:
+    com.BricoPro: INFO
+    org.springframework.security: WARN
+    org.flywaydb: INFO
+    org.hibernate.SQL: WARN

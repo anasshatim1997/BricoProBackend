@@ -127,43 +127,48 @@ jobs:
 
       - name: Create minimal .env for docker-compose
         run: |
-            cat > .env << 'ENVEOF'
-            APP_ENV=ci
-            SERVER_PORT=8080
-            DB_URL=jdbc:mysql://db:3306/bricopro_dev?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
-            DB_USERNAME=root
-            DB_PASSWORD=ci_test_password
-            DB_POOL_SIZE=5
-            JWT_SECRET=Y2ktb25seS1zZWNyZXQta2V5LWZvci1kb2NrZXItYnVpbGQtdmVyaWZpY2F0aW9uLW9ubHk=
-            JWT_ACCESS_EXP_MS=900000
-            JWT_REFRESH_EXP_MS=604800000
-            CORS_ALLOWED_ORIGINS=http://localhost:3000
-            GOOGLE_CLIENT_ID=ci-placeholder
-            GOOGLE_CLIENT_SECRET=ci-placeholder
-            FACEBOOK_CLIENT_ID=ci-placeholder
-            FACEBOOK_CLIENT_SECRET=ci-placeholder
-            MAIL_HOST=smtp.gmail.com
-            MAIL_PORT=587
-            MAIL_USERNAME=ci@bricopro.ma
-            MAIL_PASSWORD=ci-placeholder
-            SPRING_AUTOCONFIGURE_EXCLUDE=org.springframework.boot.autoconfigure.mail.MailSenderAutoConfiguration
-            UPLOAD_BASE_DIR=/app/uploads
-            WHATSAPP_ENABLED=false
-            FCM_SERVER_KEY=
-            PAYMENT_CMI_TEST_MODE=true
-            TESSDATA_PATH=/usr/share/tesseract-ocr/5/tessdata
-            OCR_LANGUAGE=fra
-            APP_OAUTH2_REDIRECT_URI=brico://oauth2/callback
-            ENVEOF
+          cat > .env << 'ENVEOF'
+          APP_ENV=ci
+          SERVER_PORT=8080
+          DB_URL=jdbc:mysql://db:3306/bricopro_dev?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
+          DB_USERNAME=root
+          DB_PASSWORD=ci_test_password
+          DB_POOL_SIZE=5
+          JWT_SECRET=Y2ktb25seS1zZWNyZXQta2V5LWZvci1kb2NrZXItYnVpbGQtdmVyaWZpY2F0aW9uLW9ubHk=
+          JWT_ACCESS_EXP_MS=900000
+          JWT_REFRESH_EXP_MS=604800000
+          CORS_ALLOWED_ORIGINS=http://localhost:3000
+          GOOGLE_CLIENT_ID=ci-placeholder
+          GOOGLE_CLIENT_SECRET=ci-placeholder
+          FACEBOOK_CLIENT_ID=ci-placeholder
+          FACEBOOK_CLIENT_SECRET=ci-placeholder
+          MAIL_HOST=smtp.gmail.com
+          MAIL_PORT=587
+          MAIL_USERNAME=ci@bricopro.ma
+          MAIL_PASSWORD=ci-placeholder
+          SPRING_AUTOCONFIGURE_EXCLUDE=org.springframework.boot.autoconfigure.mail.MailSenderAutoConfiguration
+          UPLOAD_BASE_DIR=/app/uploads
+          WHATSAPP_ENABLED=false
+          FCM_SERVER_KEY=
+          PAYMENT_CMI_TEST_MODE=true
+          TESSDATA_PATH=/usr/share/tesseract-ocr/5/tessdata
+          OCR_LANGUAGE=fra
+          APP_OAUTH2_REDIRECT_URI=brico://oauth2/callback
+          ENVEOF
 
       - name: Build and start the full stack
         run: docker compose up --build -d
 
+      - name: Show container status right after startup
+        run: docker compose ps
+
+      - name: Show app container logs immediately
+        run: docker compose logs app --tail=100
+
       - name: Wait for the app container to report healthy
         run: |
-          echo "Waiting for the app to become reachable on :8080..."
           for i in $(seq 1 60); do
-            status=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/actuator/health || echo "000")
+            status=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/actuator/health 2>/dev/null || echo "000")
             if [ "$status" = "200" ]; then
               echo "App is up (attempt $i)"
               break
@@ -171,6 +176,12 @@ jobs:
             echo "Attempt $i/60: got HTTP $status, retrying in 5s..."
             sleep 5
           done
+
+      - name: Show actuator health detail and app logs regardless of outcome
+        run: |
+          docker compose ps
+          curl -s http://localhost:8080/actuator/health || echo "curl failed entirely"
+          docker compose logs app
 
       - name: Verify /actuator/health reports UP
         run: |
@@ -187,11 +198,8 @@ jobs:
       - name: Dump container logs on failure
         if: failure()
         run: |
-          echo "── db logs ──────────────────────────────"
           docker compose logs db || true
-          echo "── redis logs ───────────────────────────"
           docker compose logs redis || true
-          echo "── app logs ─────────────────────────────"
           docker compose logs app || true
 
       - name: Tear down the stack

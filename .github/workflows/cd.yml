@@ -101,12 +101,20 @@ jobs:
             -e FACEBOOK_CLIENT_ID=verify-placeholder \
             -e FACEBOOK_CLIENT_SECRET=verify-placeholder \
             -e MAIL_PASSWORD=verify-placeholder \
+            -e SPRING_AUTOCONFIGURE_EXCLUDE=org.springframework.boot.autoconfigure.mail.MailSenderAutoConfiguration \
             -p 8080:8080 \
             "$IMAGE_TAG"
 
+          echo "Container status right after startup:"
+          docker ps -a --filter name=verify-app
+
+          sleep 10
+          echo "Early logs from verify-app:"
+          docker logs verify-app --tail=100
+
           echo "Waiting for the published image's app container to become healthy..."
           for i in $(seq 1 60); do
-            status=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/actuator/health || echo "000")
+            status=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/actuator/health 2>/dev/null || echo "000")
             if [ "$status" = "200" ]; then
               echo "Published image is healthy (attempt $i)"
               break

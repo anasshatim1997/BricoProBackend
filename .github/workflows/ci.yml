@@ -60,10 +60,32 @@ jobs:
       - name: Run unit and integration tests
         env:
           SPRING_PROFILES_ACTIVE: test
+          DB_URL: jdbc:mysql://127.0.0.1:3306/bricopro_test?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
           DB_USERNAME: root
           DB_PASSWORD: test_root_password
           SPRING_DATA_REDIS_HOST: 127.0.0.1
           SPRING_DATA_REDIS_PORT: 6379
+          JWT_SECRET: Y2ktb25seS1zZWNyZXQta2V5LWZvci1kb2NrZXItYnVpbGQtdmVyaWZpY2F0aW9uLW9ubHk=
+          JWT_ACCESS_EXP_MS: 900000
+          JWT_REFRESH_EXP_MS: 604800000
+          CORS_ALLOWED_ORIGINS: http://localhost:3000
+          GOOGLE_CLIENT_ID: ci-placeholder
+          GOOGLE_CLIENT_SECRET: ci-placeholder
+          FACEBOOK_CLIENT_ID: ci-placeholder
+          FACEBOOK_CLIENT_SECRET: ci-placeholder
+          MAIL_HOST: smtp.gmail.com
+          MAIL_PORT: 587
+          MAIL_USERNAME: ci@bricopro.ma
+          MAIL_PASSWORD: ci-placeholder
+          UPLOAD_BASE_DIR: /tmp/uploads
+          WHATSAPP_ENABLED: false
+          FCM_SERVER_KEY: ""
+          PAYMENT_CMI_TEST_MODE: true
+          TESSDATA_PATH: /usr/share/tesseract-ocr/5/tessdata
+          OCR_LANGUAGE: fra
+          APP_OAUTH2_REDIRECT_URI: brico://oauth2/callback
+          ADMIN_EMAIL: ci-admin@bricopro.ma
+          ADMIN_PASSWORD: ci-placeholder-password
         run: ./mvnw -B test
 
       - name: Publish test report

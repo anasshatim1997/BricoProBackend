@@ -127,33 +127,34 @@ jobs:
 
       - name: Create minimal .env for docker-compose
         run: |
-          cat > .env << 'ENVEOF'
-          APP_ENV=ci
-          SERVER_PORT=8080
-          DB_URL=jdbc:mysql://db:3306/bricopro_dev?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
-          DB_USERNAME=root
-          DB_PASSWORD=ci_test_password
-          DB_POOL_SIZE=5
-          JWT_SECRET=Y2ktb25seS1zZWNyZXQta2V5LWZvci1kb2NrZXItYnVpbGQtdmVyaWZpY2F0aW9uLW9ubHk=
-          JWT_ACCESS_EXP_MS=900000
-          JWT_REFRESH_EXP_MS=604800000
-          CORS_ALLOWED_ORIGINS=http://localhost:3000
-          GOOGLE_CLIENT_ID=ci-placeholder
-          GOOGLE_CLIENT_SECRET=ci-placeholder
-          FACEBOOK_CLIENT_ID=ci-placeholder
-          FACEBOOK_CLIENT_SECRET=ci-placeholder
-          MAIL_HOST=smtp.gmail.com
-          MAIL_PORT=587
-          MAIL_USERNAME=ci@bricopro.ma
-          MAIL_PASSWORD=ci-placeholder
-          UPLOAD_BASE_DIR=/app/uploads
-          WHATSAPP_ENABLED=false
-          FCM_SERVER_KEY=
-          PAYMENT_CMI_TEST_MODE=true
-          TESSDATA_PATH=/usr/share/tesseract-ocr/5/tessdata
-          OCR_LANGUAGE=fra
-          APP_OAUTH2_REDIRECT_URI=brico://oauth2/callback
-          ENVEOF
+            cat > .env << 'ENVEOF'
+            APP_ENV=ci
+            SERVER_PORT=8080
+            DB_URL=jdbc:mysql://db:3306/bricopro_dev?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
+            DB_USERNAME=root
+            DB_PASSWORD=ci_test_password
+            DB_POOL_SIZE=5
+            JWT_SECRET=Y2ktb25seS1zZWNyZXQta2V5LWZvci1kb2NrZXItYnVpbGQtdmVyaWZpY2F0aW9uLW9ubHk=
+            JWT_ACCESS_EXP_MS=900000
+            JWT_REFRESH_EXP_MS=604800000
+            CORS_ALLOWED_ORIGINS=http://localhost:3000
+            GOOGLE_CLIENT_ID=ci-placeholder
+            GOOGLE_CLIENT_SECRET=ci-placeholder
+            FACEBOOK_CLIENT_ID=ci-placeholder
+            FACEBOOK_CLIENT_SECRET=ci-placeholder
+            MAIL_HOST=smtp.gmail.com
+            MAIL_PORT=587
+            MAIL_USERNAME=ci@bricopro.ma
+            MAIL_PASSWORD=ci-placeholder
+            SPRING_AUTOCONFIGURE_EXCLUDE=org.springframework.boot.autoconfigure.mail.MailSenderAutoConfiguration
+            UPLOAD_BASE_DIR=/app/uploads
+            WHATSAPP_ENABLED=false
+            FCM_SERVER_KEY=
+            PAYMENT_CMI_TEST_MODE=true
+            TESSDATA_PATH=/usr/share/tesseract-ocr/5/tessdata
+            OCR_LANGUAGE=fra
+            APP_OAUTH2_REDIRECT_URI=brico://oauth2/callback
+            ENVEOF
 
       - name: Build and start the full stack
         run: docker compose up --build -d

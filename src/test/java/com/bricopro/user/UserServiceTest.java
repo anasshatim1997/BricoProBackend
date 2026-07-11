@@ -203,7 +203,6 @@ class UserServiceTest {
         @DisplayName("creates new worker profile when it does not exist")
         void createsProfileIfMissing() {
             when(workerProfileRepository.findByUserId(2L)).thenReturn(Optional.empty());
-            when(userRepository.findById(2L)).thenReturn(Optional.of(workerUser));
             when(workerProfileRepository.save(any())).thenAnswer(inv -> {
                 WorkerProfile p = inv.getArgument(0);
                 p = WorkerProfile.builder().id(99L).user(workerUser).bio(p.getBio()).build();
@@ -219,8 +218,7 @@ class UserServiceTest {
             userService.updateWorkerProfile(2L, req);
 
             verify(workerProfileRepository, atLeast(1)).save(any());
-        }
-    }
+        }    }
 
     // ─── UPDATE CLIENT PROFILE ────────────────────────────────────────────────
 

@@ -11,6 +11,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.Collections;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.*;
@@ -44,7 +45,7 @@ class DemandHeatmapServiceTest {
     @DisplayName("returns all 9 service types, with zero count for types absent from the grouped result")
     void includesAllServiceTypesEvenWithZeroCount() {
         when(taskRepository.countByStatusGroupedByServiceType(TaskStatus.SEARCHING))
-                .thenReturn(List.of(new Object[]{ServiceType.PLUMBING, 15L}));
+                .thenReturn(Collections.singletonList(new Object[]{ServiceType.PLUMBING, 15L}));
 
         List<DemandHeatmapService.HeatmapPoint> result = heatmapService.getHeatmap();
 

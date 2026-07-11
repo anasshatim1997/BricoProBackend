@@ -45,7 +45,7 @@ class TokenServicesTest {
 
         @BeforeEach
         void setup() {
-            when(redisTemplate.opsForValue()).thenReturn(valueOps);
+            lenient().when(redisTemplate.opsForValue()).thenReturn(valueOps);
         }
 
         @Test
@@ -89,7 +89,6 @@ class TokenServicesTest {
         @DisplayName("blacklist() does not set key for already-expired tokens")
         void doesNotBlacklistExpiredToken() {
             io.jsonwebtoken.Claims mockClaims = mock(io.jsonwebtoken.Claims.class);
-            // Token expired 1 minute ago
             java.util.Date pastDate = new java.util.Date(System.currentTimeMillis() - 60_000L);
             when(mockClaims.getExpiration()).thenReturn(pastDate);
             when(jwtService.parseToken("expired.token")).thenReturn(mockClaims);
@@ -113,7 +112,6 @@ class TokenServicesTest {
             when(jwtService.parseToken(anyString())).thenThrow(new RuntimeException("parse error"));
             when(jwtProperties.getAccessTokenExpirationMs()).thenReturn(900_000L);
 
-            // Falls back to using expiration from properties — should set key
             assertThatNoException().isThrownBy(() -> tokenBlacklistService.blacklist("bad.token"));
         }
     }
@@ -134,7 +132,7 @@ class TokenServicesTest {
         @BeforeEach
         void setup() {
             user = User.builder().id(1L).email("test@bricopro.ma").role(Role.CLIENT).build();
-            when(jwtProperties.getRefreshTokenExpirationMs()).thenReturn(604_800_000L); // 7 days
+            lenient().when(jwtProperties.getRefreshTokenExpirationMs()).thenReturn(604_800_000L);
         }
 
         @Test
@@ -160,7 +158,6 @@ class TokenServicesTest {
             RefreshToken token = refreshTokenService.create(user);
 
             assertThat(token.getToken()).isNotBlank();
-            // UUID format: 36 characters with hyphens
             assertThat(token.getToken()).hasSize(36);
         }
 
@@ -171,7 +168,6 @@ class TokenServicesTest {
 
             RefreshToken token = refreshTokenService.create(user);
 
-            // Should expire approximately 7 days from now
             assertThat(token.getExpiresAt()).isAfter(LocalDateTime.now().plusDays(6));
             assertThat(token.getExpiresAt()).isBefore(LocalDateTime.now().plusDays(8));
         }
@@ -195,7 +191,7 @@ class TokenServicesTest {
         void expiredTokenReturnsEmpty() {
             RefreshToken rt = RefreshToken.builder()
                     .id(1L).user(user).token("expired-token")
-                    .expiresAt(LocalDateTime.now().minusDays(1)) // expired yesterday
+                    .expiresAt(LocalDateTime.now().minusDays(1))
                     .revoked(false).build();
             when(refreshTokenRepository.findByTokenAndRevokedFalse("expired-token"))
                     .thenReturn(Optional.of(rt));

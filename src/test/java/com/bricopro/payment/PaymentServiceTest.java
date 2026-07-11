@@ -29,8 +29,9 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
@@ -84,7 +85,7 @@ class PaymentServiceTest {
                 paymentRepository, platformRevenueRepository, taskRepository,
                 notificationService, communicationService, mapper, gateways);
 
-        Field indexMethod = PaymentService.class.getDeclaredMethod("indexGateways");
+        Method indexMethod = PaymentService.class.getDeclaredMethod("indexGateways");
         indexMethod.setAccessible(true);
         indexMethod.invoke(paymentService);
     }
@@ -126,7 +127,7 @@ class PaymentServiceTest {
 
             Payment captured = captor.getAllValues().get(0);
             assertThat(captured.getGrossAmount()).isEqualByComparingTo(BigDecimal.valueOf(500));
-            assertThat(captured.getPlatformFee()).isEqualByComparingTo(BigDecimal.valueOf(60).setScale(2));
+            assertThat(captured.getPlatformFee()).isEqualByComparingTo(BigDecimal.valueOf(60).setScale(2, RoundingMode.UNNECESSARY));
             assertThat(captured.getProcessingFee()).isEqualByComparingTo(new BigDecimal("7.50"));
             assertThat(captured.getNetAmount()).isEqualByComparingTo(new BigDecimal("432.50"));
         }

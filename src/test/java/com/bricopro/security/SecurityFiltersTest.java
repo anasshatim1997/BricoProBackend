@@ -203,8 +203,8 @@ class SecurityFiltersTest {
         void blocksOversizedRequest() throws Exception {
             MockHttpServletRequest request = new MockHttpServletRequest();
             request.setContentType("application/json");
-            // Set content-length header to 11MB
-            request.addHeader("Content-Length", String.valueOf(11L * 1024 * 1024));
+            byte[] oversizedBody = new byte[(int) (11L * 1024 * 1024)];
+            request.setContent(oversizedBody);
 
             MockHttpServletResponse response = new MockHttpServletResponse();
             MockFilterChain chain = new MockFilterChain();

@@ -62,10 +62,10 @@ class MatchingAndGeolocationTest {
         }
 
         @Test
-        @DisplayName("haversine distance Casablanca → Marrakech ≈ 240 km")
+        @DisplayName("haversine distance Casablanca → Marrakech ≈ 219 km")
         void casablancaToMarrakech() {
             double dist = GeolocationService.haversine(33.5731, -7.5898, 31.6295, -7.9811);
-            assertThat(dist).isBetween(235.0, 250.0);
+            assertThat(dist).isBetween(215.0, 225.0);
         }
 
         @Test

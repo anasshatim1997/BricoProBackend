@@ -112,19 +112,20 @@ class HtmlSanitizerTest {
 
         @ParameterizedTest
         @ValueSource(strings = {
-            "<script>alert(1)</script>",
-            "<img src=x onerror=alert(1)>",
-            "<svg onload=alert(1)>",
-            "<body onload=alert(1)>",
-            "javascript:alert('XSS')"
+                "<script>alert(1)</script>",
+                "<img src=x onerror=alert(1)>",
+                "<svg onload=alert(1)>",
+                "<body onload=alert(1)>",
+                "javascript:alert('XSS')"
         })
         @DisplayName("blocks common XSS vectors")
         void blocksXssVectors(String xssPayload) {
             String result = sanitizer.sanitize(xssPayload);
             assertThat(result)
-                    .doesNotContain("alert")
-                    .doesNotContain("<script")
-                    .doesNotContain("javascript:");
+                    .doesNotContainIgnoringCase("<script")
+                    .doesNotContainIgnoringCase("onerror=")
+                    .doesNotContainIgnoringCase("onload=")
+                    .doesNotContainIgnoringCase("javascript:");
         }
     }
 

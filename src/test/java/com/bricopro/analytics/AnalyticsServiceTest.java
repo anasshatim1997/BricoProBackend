@@ -42,16 +42,14 @@ class AnalyticsServiceTest {
 
     @InjectMocks AnalyticsService analyticsService;
 
-    private User workerUser;
-    private User clientUser;
     private WorkerProfile workerProfile;
 
     @BeforeEach
     void setup() {
-        workerUser = User.builder().id(2L).firstName("Fouad").lastName("Mernissi")
+        User workerUser = User.builder().id(2L).firstName("Fouad").lastName("Mernissi")
                 .role(Role.WORKER).status(Status.ACTIVE).build();
 
-        clientUser = User.builder().id(1L).firstName("Nour").lastName("El Alami")
+        User clientUser = User.builder().id(1L).firstName("Nour").lastName("El Alami")
                 .role(Role.CLIENT).status(Status.ACTIVE).build();
 
         workerProfile = WorkerProfile.builder()
@@ -79,9 +77,9 @@ class AnalyticsServiceTest {
 
             when(taskRepository.count()).thenReturn(300L);
             when(taskRepository.countActiveTasks()).thenReturn(25L);
+            when(taskRepository.countByStatus(any())).thenReturn(10L);
             when(taskRepository.countByStatus(TaskStatus.COMPLETED)).thenReturn(200L);
             when(taskRepository.countByStatus(TaskStatus.DISPUTED)).thenReturn(3L);
-            when(taskRepository.countByStatus(any())).thenReturn(10L); // for all statuses
             when(taskRepository.countByServiceType(any())).thenReturn(30L);
 
             when(paymentRepository.sumAllPlatformFees()).thenReturn(BigDecimal.valueOf(50000));

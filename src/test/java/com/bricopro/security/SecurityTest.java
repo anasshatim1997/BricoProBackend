@@ -41,9 +41,8 @@ class SecurityTest {
         @BeforeEach
         void setup() {
             JwtProperties props = new JwtProperties();
-            // 256-bit base64 encoded secret for tests
             props.setSecret("dGVzdC1zZWNyZXQta2V5LWZvci1icmljb3Byby10ZXN0aW5nLW9ubHktbm90LXNob3J0");
-            props.setAccessTokenExpirationMs(3_600_000L); // 1 hour
+            props.setAccessTokenExpirationMs(3_600_000L);
             props.setRefreshTokenExpirationMs(604_800_000L);
 
             jwtService = new JwtService(props);
@@ -89,7 +88,7 @@ class SecurityTest {
         void expiredToken() {
             JwtProperties shortProps = new JwtProperties();
             shortProps.setSecret("dGVzdC1zZWNyZXQta2V5LWZvci1icmljb3Byby10ZXN0aW5nLW9ubHktbm90LXNob3J0");
-            shortProps.setAccessTokenExpirationMs(-1L); // already expired
+            shortProps.setAccessTokenExpirationMs(-1L);
             JwtService shortJwt = new JwtService(shortProps);
 
             String token = shortJwt.generateAccessToken(testUser);
@@ -119,7 +118,7 @@ class SecurityTest {
 
         @BeforeEach
         void setup() {
-            when(redisTemplate.opsForValue()).thenReturn(valueOps);
+            lenient().when(redisTemplate.opsForValue()).thenReturn(valueOps);
         }
 
         @Test
@@ -157,7 +156,9 @@ class SecurityTest {
         void loginFailedSetsTTL() {
             when(valueOps.increment(anyString())).thenReturn(1L);
             loginAttemptService.loginFailed("user@test.ma");
-            verify(redisTemplate).expire(eq("bricopro:login:attempts:user@test.ma"), anyLong(), any());
+            verify(redisTemplate).expire(
+                    eq("bricopro:login:attempts:user@test.ma"),
+                    eq(Duration.ofMinutes(30)));
         }
 
         @Test

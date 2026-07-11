@@ -30,7 +30,7 @@ public class ChurnPredictionService {
         if (cancelledTasks > 3)   { churnScore += 30; signals.add("HIGH_CANCELLATIONS"); }
         if (recentTasks < 2)      { churnScore += 20; signals.add("LOW_ENGAGEMENT"); }
 
-        String risk = churnScore >= 60 ? "HIGH" : churnScore >= 30 ? "MEDIUM" : "LOW";
+        String risk = churnScore >= 50 ? "HIGH" : churnScore >= 30 ? "MEDIUM" : "LOW";
 
         return new ChurnReport(clientId, risk, churnScore, signals);
     }

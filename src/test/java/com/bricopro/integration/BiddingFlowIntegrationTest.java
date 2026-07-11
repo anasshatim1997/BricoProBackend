@@ -12,6 +12,7 @@ import com.bricopro.user.repository.UserRepository;
 import com.bricopro.user.repository.WorkerAvailabilityRepository;
 import com.bricopro.user.repository.WorkerProfileRepository;
 import com.bricopro.user.repository.WorkerServiceRepository;
+import com.bricopro.user.repository.WorkerSnapshotHistoryRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,8 +21,11 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
+import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -34,6 +38,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
+@Transactional
 class BiddingFlowIntegrationTest {
 
     @Autowired
@@ -57,14 +62,21 @@ class BiddingFlowIntegrationTest {
     @Autowired
     private BidRepository bidRepository;
 
+    @Autowired
+    private WorkerSnapshotHistoryRepository workerSnapshotHistoryRepository;
+
+    @MockitoBean
+    private JavaMailSender javaMailSender;
+
     @BeforeEach
     void setUp() {
-        userRepository.deleteAll();
-        taskRepository.deleteAll();
-        workerProfileRepository.deleteAll();
-        availabilityRepository.deleteAll();
-        workerServiceRepository.deleteAll();
-        bidRepository.deleteAll();
+        bidRepository.deleteAllInBatch();
+        availabilityRepository.deleteAllInBatch();
+        workerServiceRepository.deleteAllInBatch();
+        workerSnapshotHistoryRepository.deleteAllInBatch();
+        taskRepository.deleteAllInBatch();
+        workerProfileRepository.deleteAllInBatch();
+        userRepository.deleteAllInBatch();
     }
 
     private RequestPostProcessor as(User user) {
@@ -82,7 +94,6 @@ class BiddingFlowIntegrationTest {
                 .build());
 
         User worker1 = userRepository.save(User.builder()
-                .id(1L)
                 .firstName("Worker")
                 .lastName("One")
                 .email("worker1@test.com")
@@ -91,7 +102,6 @@ class BiddingFlowIntegrationTest {
                 .build());
 
         User worker2 = userRepository.save(User.builder()
-                .id(2L)
                 .firstName("Worker")
                 .lastName("Two")
                 .email("worker2@test.com")
@@ -167,10 +177,18 @@ class BiddingFlowIntegrationTest {
                         .content(createBidJson))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.taskId").value(savedTask.getId()))
-                .andExpect(jsonPath("$.workerId").value(1))
+                .andExpect(jsonPath("$.workerId").value(worker1.getId()))
                 .andExpect(jsonPath("$.amount").value(150));
 
-        Bid bid = bidRepository.findByTaskIdAndWorkerId(savedTask.getId(), 1L).orElseThrow();
+        String createBidJson2 = "{\"taskId\":" + savedTask.getId() + ",\"amount\":160,\"message\":\"I can also fix it\",\"estimatedDurationHours\":2}";
+
+        mockMvc.perform(post("/api/v1/bids")
+                        .with(as(worker2))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(createBidJson2))
+                .andExpect(status().isOk());
+
+        Bid bid = bidRepository.findByTaskIdAndWorkerId(savedTask.getId(), worker1.getId()).orElseThrow();
         assertThat(bid.getStatus()).isEqualTo(Bid.BidStatus.PENDING);
 
         mockMvc.perform(post("/api/v1/bids/" + bid.getId() + "/accept")
@@ -179,7 +197,7 @@ class BiddingFlowIntegrationTest {
 
         Task updatedTask = taskRepository.findById(savedTask.getId()).orElseThrow();
         assertThat(updatedTask.getWorker()).isNotNull();
-        assertThat(updatedTask.getWorker().getId()).isEqualTo(1L);
+        assertThat(updatedTask.getWorker().getId()).isEqualTo(worker1.getId());
         assertThat(updatedTask.getStatus()).isEqualTo(Task.TaskStatus.CONFIRMED);
 
         bid = bidRepository.findById(bid.getId()).orElseThrow();

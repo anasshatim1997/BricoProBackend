@@ -28,12 +28,15 @@ public class FraudDetectionService {
         double disputeRate      = total > 0 ? (double) disputed  / total * 100 : 0;
 
         List<String> flags = new ArrayList<>();
-        String riskLevel = "LOW";
+        boolean high = false;
+        boolean medium = false;
 
-        if (cancellationRate > 30) { flags.add("HIGH_CANCELLATION_RATE"); riskLevel = "HIGH"; }
-        if (disputeRate > 20)      { flags.add("HIGH_DISPUTE_RATE");       riskLevel = "HIGH"; }
-        if (cancelled > 5)         { flags.add("MULTIPLE_CANCELLATIONS");  riskLevel = "MEDIUM"; }
-        if (disputed > 2)          { flags.add("MULTIPLE_DISPUTES");       riskLevel = "MEDIUM"; }
+        if (cancellationRate > 30) { flags.add("HIGH_CANCELLATION_RATE"); high = true; }
+        if (disputeRate > 20)      { flags.add("HIGH_DISPUTE_RATE");       high = true; }
+        if (cancelled > 5)         { flags.add("MULTIPLE_CANCELLATIONS");  medium = true; }
+        if (disputed > 2)          { flags.add("MULTIPLE_DISPUTES");       medium = true; }
+
+        String riskLevel = high ? "HIGH" : medium ? "MEDIUM" : "LOW";
 
         return new FraudReport(workerId, riskLevel, flags, cancellationRate, disputeRate);
     }

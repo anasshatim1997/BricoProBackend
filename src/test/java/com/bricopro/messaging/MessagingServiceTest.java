@@ -194,27 +194,17 @@ class MessagingServiceTest {
         @Test
         @DisplayName("throws SecurityException when sender is not a participant")
         void nonParticipantThrows() {
-            User outsider = User.builder().id(99L).role(Role.CLIENT).build();
-
             when(conversationRepository.findById(100L)).thenReturn(Optional.of(conversation));
-            when(userRepository.findById(99L)).thenReturn(Optional.of(outsider));
-            when(messageRepository.save(any())).thenAnswer(inv -> {
-                Message m = inv.getArgument(0);
-                m = Message.builder().id(1L).conversation(conversation).sender(outsider)
-                        .content("intrusion").messageType(MessageType.TEXT)
-                        .isRead(false).createdAt(LocalDateTime.now()).build();
-                return m;
-            });
 
             SendMessageRequest req = new SendMessageRequest();
             req.setContent("intrusion");
 
-            // SecurityException is thrown inside sendMessage after save but during participant validation
-            // The service calls validateParticipant which throws SecurityException
-            // We check it's thrown here at conversation lookup
             assertThatThrownBy(() -> messagingService.sendMessage(99L, 100L, req))
                     .isInstanceOf(SecurityException.class)
                     .hasMessageContaining("participant");
+
+            verifyNoInteractions(messageRepository);
+            verify(userRepository, never()).findById(anyLong());
         }
 
         @Test

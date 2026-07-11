@@ -33,8 +33,6 @@ import static org.mockito.Mockito.*;
 @DisplayName("Badge & Payment Gateway")
 class BadgeAndGatewayTest {
 
-    // ─── BADGE SERVICE ────────────────────────────────────────────────────────
-
     @Nested
     @DisplayName("BadgeService")
     class BadgeServiceTests {
@@ -200,8 +198,6 @@ class BadgeAndGatewayTest {
         }
     }
 
-    // ─── CASH GATEWAY ─────────────────────────────────────────────────────────
-
     @Nested
     @DisplayName("CashGateway")
     class CashGatewayTests {
@@ -214,11 +210,11 @@ class BadgeAndGatewayTest {
         }
 
         @Test
-        @DisplayName("initiate() returns synchronous result with CASH prefix reference")
-        void initiateReturnsSynchronous() {
+        @DisplayName("initiate() returns asynchronous result with CASH prefix reference")
+        void initiateReturnsAsynchronous() {
             GatewayResult result = cashGateway.initiate(5L, BigDecimal.valueOf(500), "order-123");
 
-            assertThat(result.synchronous()).isTrue();
+            assertThat(result.synchronous()).isFalse();
             assertThat(result.reference()).startsWith("CASH-order-123-");
             assertThat(result.redirectUrl()).isNull();
         }
@@ -251,8 +247,8 @@ class BadgeAndGatewayTest {
             GatewayResult r1 = cashGateway.initiate(1L, BigDecimal.valueOf(100), "ref-1");
             GatewayResult r2 = cashGateway.initiate(2L, BigDecimal.valueOf(9999.99), "ref-2");
 
-            assertThat(r1.synchronous()).isTrue();
-            assertThat(r2.synchronous()).isTrue();
+            assertThat(r1.synchronous()).isFalse();
+            assertThat(r2.synchronous()).isFalse();
         }
     }
 }

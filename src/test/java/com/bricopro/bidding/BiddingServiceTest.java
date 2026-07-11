@@ -9,6 +9,7 @@ import com.bricopro.task.entity.Task;
 import com.bricopro.task.repository.TaskRepository;
 import com.bricopro.user.entity.User;
 import com.bricopro.user.repository.UserRepository;
+import com.bricopro.user.service.WorkerSnapshotService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -39,6 +40,9 @@ class BiddingServiceTest {
 
     @Mock
     private BidMapper bidMapper;
+
+    @Mock
+    private WorkerSnapshotService workerSnapshotService;
 
     @InjectMocks
     private BiddingServiceImpl biddingService;
@@ -129,6 +133,7 @@ class BiddingServiceTest {
         when(bidRepository.findById(1L)).thenReturn(Optional.of(bid));
         when(taskRepository.findById(1L)).thenReturn(Optional.of(task));
         when(userRepository.findById(1L)).thenReturn(Optional.of(worker));
+        doNothing().when(workerSnapshotService).captureOnAssignment(anyLong(), anyLong());
 
         biddingService.acceptBid(1L, 2L);
 
@@ -137,7 +142,8 @@ class BiddingServiceTest {
         assertThat(task.getStatus()).isEqualTo(Task.TaskStatus.CONFIRMED);
         verify(bidRepository).save(bid);
         verify(taskRepository).save(task);
-        verify(bidRepository).updateStatusIfPending(1L, Bid.BidStatus.REJECTED);
+        verify(bidRepository).rejectOtherPendingBids(1L, 1L, Bid.BidStatus.REJECTED);
+        verify(workerSnapshotService).captureOnAssignment(1L, 1L);
     }
 
     @Test

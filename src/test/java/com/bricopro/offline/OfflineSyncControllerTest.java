@@ -10,6 +10,10 @@ import com.bricopro.task.service.TaskService;
 import com.bricopro.user.entity.User;
 import com.bricopro.user.entity.User.Role;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletRequest;
+import jakarta.servlet.ServletResponse;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -18,9 +22,6 @@ import org.springframework.http.MediaType;
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
-
-import java.util.List;
-import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -38,6 +39,17 @@ class OfflineSyncControllerTest {
     @MockitoBean MessagingService messagingService;
     @MockitoBean JwtAuthFilter jwtAuthFilter;
     @MockitoBean OAuth2SuccessHandler oAuth2SuccessHandler;
+
+    @BeforeEach
+    void allowFilterChainToProceed() throws Exception {
+        doAnswer(invocation -> {
+            ServletRequest req = invocation.getArgument(0);
+            ServletResponse res = invocation.getArgument(1);
+            FilterChain chain = invocation.getArgument(2);
+            chain.doFilter(req, res);
+            return null;
+        }).when(jwtAuthFilter).doFilter(any(), any(), any());
+    }
 
     private User actor() {
         return User.builder().id(1L).email("worker@test.ma").role(Role.WORKER).build();

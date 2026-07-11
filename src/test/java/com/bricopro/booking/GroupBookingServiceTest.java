@@ -1,5 +1,6 @@
 package com.bricopro.booking;
 
+import com.bricopro.booking.dto.CreateGroupBookingRequest;
 import com.bricopro.booking.entity.GroupBooking;
 import com.bricopro.booking.repository.GroupBookingRepository;
 import com.bricopro.booking.service.GroupBookingService;

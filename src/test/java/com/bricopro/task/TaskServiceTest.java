@@ -1,15 +1,21 @@
 package com.bricopro.task;
 
+import com.bricopro.matching.RealTimeMatchingService;
 import com.bricopro.notification.service.CommunicationService;
 import com.bricopro.notification.service.NotificationService;
 import com.bricopro.task.dto.TaskDtos.*;
 import com.bricopro.task.entity.Review;
 import com.bricopro.task.entity.Task;
+import com.bricopro.task.entity.Task.CancelledBy;
 import com.bricopro.task.entity.Task.TaskStatus;
 import com.bricopro.task.mapper.TaskMapper;
 import com.bricopro.task.repository.ReviewRepository;
 import com.bricopro.task.repository.TaskRepository;
+import com.bricopro.task.service.RatingSuspensionService;
 import com.bricopro.task.service.TaskService;
+import com.bricopro.task.service.TaskService.ReviewReceivedEvent;
+import com.bricopro.task.service.TaskService.TaskAcceptedEvent;
+import com.bricopro.task.service.TaskService.TaskStatusChangedEvent;
 import com.bricopro.user.entity.User;
 import com.bricopro.user.entity.User.Role;
 import com.bricopro.user.entity.User.Status;
@@ -22,9 +28,11 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -51,6 +59,9 @@ class TaskServiceTest {
     @Mock NotificationService notificationService;
     @Mock CommunicationService communicationService;
     @Mock TaskMapper mapper;
+    @Mock RatingSuspensionService ratingSuspensionService;
+    @Mock RealTimeMatchingService realTimeMatchingService;
+    @Mock ApplicationEventPublisher eventPublisher;
 
     @InjectMocks TaskService taskService;
 
@@ -88,7 +99,7 @@ class TaskServiceTest {
     class Create {
 
         @Test
-        @DisplayName("creates task with SEARCHING status and notifies workers")
+        @DisplayName("creates task with SEARCHING status and notifies workers when auto-assign disabled")
         void createTask() {
             CreateTaskRequest req = new CreateTaskRequest();
             req.setServiceType(ServiceType.PLUMBING);
@@ -102,12 +113,12 @@ class TaskServiceTest {
 
             when(taskRepository.save(any())).thenAnswer(inv -> {
                 Task t = inv.getArgument(0);
-                t = Task.builder().id(99L).client(client)
+                return Task.builder().id(99L).client(client)
                         .serviceType(t.getServiceType()).title(t.getTitle())
                         .description(t.getDescription()).address(t.getAddress())
                         .scheduledDate(t.getScheduledDate()).scheduledStart(t.getScheduledStart())
+                        .autoAssignEnabled(false)
                         .status(TaskStatus.SEARCHING).build();
-                return t;
             });
             TaskResponse mockResponse = new TaskResponse();
             mockResponse.setId(99L);
@@ -117,6 +128,38 @@ class TaskServiceTest {
 
             assertThat(res.getId()).isEqualTo(99L);
             verify(notificationService).notifyAvailableWorkers(any());
+            verifyNoInteractions(realTimeMatchingService);
+        }
+
+        @Test
+        @DisplayName("auto-assigns and skips worker-pool notification when auto-assign enabled")
+        void createTaskAutoAssign() {
+            CreateTaskRequest req = new CreateTaskRequest();
+            req.setServiceType(ServiceType.PLUMBING);
+            req.setTitle("Fix leaking pipe");
+            req.setScheduledDate(LocalDate.now().plusDays(3));
+            req.setScheduledStart(LocalTime.of(10, 0));
+            req.setAutoAssignEnabled(true);
+
+            Task savedTask = Task.builder().id(99L).client(client)
+                    .serviceType(ServiceType.PLUMBING).title(req.getTitle())
+                    .scheduledDate(req.getScheduledDate()).scheduledStart(req.getScheduledStart())
+                    .autoAssignEnabled(true)
+                    .status(TaskStatus.SEARCHING).build();
+
+            when(taskRepository.save(any())).thenReturn(savedTask);
+            when(realTimeMatchingService.findMatchingWorkers(any())).thenReturn(List.of(2L));
+            TaskResponse mockResponse = new TaskResponse();
+            mockResponse.setId(99L);
+            when(mapper.toResponse(any())).thenReturn(mockResponse);
+
+            TaskResponse res = taskService.create(client, req);
+
+            assertThat(res.getId()).isEqualTo(99L);
+            verify(realTimeMatchingService).findMatchingWorkers(any());
+            verify(realTimeMatchingService).notifyWorkers(eq(List.of(2L)), any());
+            verify(realTimeMatchingService).autoAssign(any(), eq(List.of(2L)));
+            verify(notificationService, never()).notifyAvailableWorkers(any());
         }
     }
 
@@ -127,40 +170,33 @@ class TaskServiceTest {
     class AcceptTask {
 
         @Test
-        @DisplayName("worker accepts SEARCHING task → CONFIRMED")
+        @DisplayName("worker accepts SEARCHING task → CONFIRMED and publishes TaskAcceptedEvent")
         void acceptSearchingTask() {
+            when(taskRepository.claimTask(10L, worker.getId(), TaskStatus.SEARCHING, TaskStatus.CONFIRMED))
+                    .thenReturn(1);
             when(taskRepository.findById(10L)).thenReturn(Optional.of(task));
-            when(taskRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
             TaskResponse mockResponse = new TaskResponse();
             when(mapper.toResponse(any())).thenReturn(mockResponse);
 
             taskService.acceptTask(worker, 10L);
 
-            assertThat(task.getStatus()).isEqualTo(TaskStatus.CONFIRMED);
-            assertThat(task.getWorker()).isEqualTo(worker);
-            verify(notificationService).notifyTaskAccepted(task);
-            verify(communicationService).sendTaskConfirmationEmail(
-                    eq("khalid@test.ma"), eq("Khalid"), anyString(), anyString());
+            ArgumentCaptor<TaskAcceptedEvent> captor = ArgumentCaptor.forClass(TaskAcceptedEvent.class);
+            verify(eventPublisher).publishEvent(captor.capture());
+            assertThat(captor.getValue().task()).isEqualTo(task);
+            assertThat(captor.getValue().worker()).isEqualTo(worker);
         }
 
         @Test
-        @DisplayName("throws when task is not in SEARCHING state")
-        void taskNotSearching() {
-            task.setStatus(TaskStatus.CONFIRMED);
-            when(taskRepository.findById(10L)).thenReturn(Optional.of(task));
+        @DisplayName("throws IllegalStateException when task cannot be claimed (already taken or not found)")
+        void claimFails() {
+            when(taskRepository.claimTask(10L, worker.getId(), TaskStatus.SEARCHING, TaskStatus.CONFIRMED))
+                    .thenReturn(0);
 
             assertThatThrownBy(() -> taskService.acceptTask(worker, 10L))
                     .isInstanceOf(IllegalStateException.class)
-                    .hasMessageContaining("available");
-        }
+                    .hasMessageContaining("no longer available");
 
-        @Test
-        @DisplayName("throws when task not found")
-        void taskNotFound() {
-            when(taskRepository.findById(999L)).thenReturn(Optional.empty());
-
-            assertThatThrownBy(() -> taskService.acceptTask(worker, 999L))
-                    .isInstanceOf(IllegalArgumentException.class);
+            verifyNoInteractions(eventPublisher);
         }
     }
 
@@ -186,7 +222,7 @@ class TaskServiceTest {
             taskService.updateStatus(worker, 10L, req);
 
             assertThat(task.getStatus()).isEqualTo(TaskStatus.STARTED);
-            verify(notificationService).notifyStatusChange(task);
+            verify(eventPublisher).publishEvent(any(TaskStatusChangedEvent.class));
         }
 
         @Test
@@ -205,8 +241,7 @@ class TaskServiceTest {
             taskService.updateStatus(client, 10L, req);
 
             assertThat(task.getStatus()).isEqualTo(TaskStatus.COMPLETED);
-            verify(communicationService).sendTaskCompletedEmail(
-                    eq("khalid@test.ma"), eq("Khalid"), eq("Fix leaking pipe"));
+            verify(eventPublisher).publishEvent(any(TaskStatusChangedEvent.class));
         }
 
         @Test
@@ -222,6 +257,7 @@ class TaskServiceTest {
 
             assertThatThrownBy(() -> taskService.updateStatus(worker, 10L, req))
                     .isInstanceOf(AccessDeniedException.class);
+            verifyNoInteractions(eventPublisher);
         }
 
         @Test
@@ -237,6 +273,7 @@ class TaskServiceTest {
 
             assertThatThrownBy(() -> taskService.updateStatus(client, 10L, req))
                     .isInstanceOf(AccessDeniedException.class);
+            verifyNoInteractions(eventPublisher);
         }
 
         @Test
@@ -255,7 +292,25 @@ class TaskServiceTest {
 
             taskService.updateStatus(client, 10L, req);
 
-            assertThat(task.getCancelledBy()).isEqualTo(Task.CancelledBy.CLIENT);
+            assertThat(task.getCancelledBy()).isEqualTo(CancelledBy.CLIENT);
+            verify(eventPublisher).publishEvent(any(TaskStatusChangedEvent.class));
+        }
+
+        @Test
+        @DisplayName("throws IllegalStateException for invalid transition")
+        void invalidTransition() {
+            task.setStatus(TaskStatus.COMPLETED);
+            task.setWorker(worker);
+
+            UpdateTaskStatusRequest req = new UpdateTaskStatusRequest();
+            req.setStatus(TaskStatus.STARTED);
+
+            when(taskRepository.findById(10L)).thenReturn(Optional.of(task));
+
+            assertThatThrownBy(() -> taskService.updateStatus(worker, 10L, req))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("Invalid transition");
+            verifyNoInteractions(eventPublisher);
         }
     }
 
@@ -266,7 +321,7 @@ class TaskServiceTest {
     class SubmitReview {
 
         @Test
-        @DisplayName("client submits review for completed task")
+        @DisplayName("client submits review for completed task and publishes ReviewReceivedEvent")
         void clientReviewsWorker() {
             task.setStatus(TaskStatus.COMPLETED);
             task.setWorker(worker);
@@ -287,6 +342,7 @@ class TaskServiceTest {
                             .averageRating(BigDecimal.valueOf(4.2)).build()));
             when(workerProfileRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
             when(reviewRepository.calculateAverageRating(2L)).thenReturn(4.5);
+            when(reviewRepository.countByRevieweeId(2L)).thenReturn(6L);
             ReviewResponse mockResponse = new ReviewResponse();
             mockResponse.setRating(5);
             when(mapper.toReviewResponse(any())).thenReturn(mockResponse);
@@ -294,9 +350,12 @@ class TaskServiceTest {
             ReviewResponse res = taskService.submitReview(client, 10L, req);
 
             assertThat(res.getRating()).isEqualTo(5);
-            verify(notificationService).notifyReviewReceived(any());
-            verify(communicationService).sendReviewReceivedEmail(
-                    eq("rachid@test.ma"), eq("Rachid"), eq(5), anyString());
+            verify(ratingSuspensionService).evaluateWorkerRating(2L);
+
+            ArgumentCaptor<ReviewReceivedEvent> captor = ArgumentCaptor.forClass(ReviewReceivedEvent.class);
+            verify(eventPublisher).publishEvent(captor.capture());
+            assertThat(captor.getValue().review()).isEqualTo(savedReview);
+            assertThat(captor.getValue().reviewer()).isEqualTo(client);
         }
 
         @Test
@@ -322,6 +381,20 @@ class TaskServiceTest {
             assertThatThrownBy(() -> taskService.submitReview(client, 10L, new CreateReviewRequest()))
                     .isInstanceOf(IllegalStateException.class)
                     .hasMessageContaining("Already reviewed");
+        }
+
+        @Test
+        @DisplayName("throws when client reviews task with no assigned worker")
+        void noAssignedWorker() {
+            task.setStatus(TaskStatus.COMPLETED);
+            task.setWorker(null);
+
+            when(taskRepository.findById(10L)).thenReturn(Optional.of(task));
+            when(reviewRepository.findByTaskIdAndReviewerId(10L, 1L)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> taskService.submitReview(client, 10L, new CreateReviewRequest()))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("no assigned worker");
         }
     }
 
@@ -354,6 +427,68 @@ class TaskServiceTest {
 
             Page<TaskResponse> res = taskService.getClientTasks(1L, null, pg);
             assertThat(res.getTotalElements()).isEqualTo(1);
+        }
+    }
+
+    // ─── EVENT LISTENERS (fired AFTER_COMMIT in prod, tested directly here) ───
+
+    @Nested
+    @DisplayName("event listeners")
+    class EventListeners {
+
+        @Test
+        @DisplayName("onTaskAccepted notifies worker acceptance and emails client")
+        void onTaskAccepted() {
+            task.setWorker(worker);
+
+            taskService.onTaskAccepted(new TaskAcceptedEvent(task, worker));
+
+            verify(notificationService).notifyTaskAccepted(task);
+            verify(communicationService).sendTaskConfirmationEmail(
+                    eq("khalid@test.ma"), eq("Khalid"), anyString(), eq("Rachid Benjelloun"));
+        }
+
+        @Test
+        @DisplayName("onStatusChanged sends completion email when task is COMPLETED")
+        void onStatusChangedCompleted() {
+            task.setStatus(TaskStatus.COMPLETED);
+            task.setWorker(worker);
+
+            taskService.onStatusChanged(new TaskStatusChangedEvent(task));
+
+            verify(notificationService).notifyStatusChange(task);
+            verify(communicationService).sendTaskCompletedEmail(
+                    eq("khalid@test.ma"), eq("Khalid"), eq("Fix leaking pipe"));
+        }
+
+        @Test
+        @DisplayName("onStatusChanged emails both parties when task is CANCELLED")
+        void onStatusChangedCancelled() {
+            task.setStatus(TaskStatus.CANCELLED);
+            task.setWorker(worker);
+            task.setCancelledBy(CancelledBy.CLIENT);
+
+            taskService.onStatusChanged(new TaskStatusChangedEvent(task));
+
+            verify(notificationService).notifyStatusChange(task);
+            verify(communicationService).sendTaskCancelledEmail(
+                    eq("khalid@test.ma"), eq("Khalid"), eq("Fix leaking pipe"), eq("client"));
+            verify(communicationService).sendTaskCancelledEmail(
+                    eq("rachid@test.ma"), eq("Rachid"), eq("Fix leaking pipe"), eq("client"));
+        }
+
+        @Test
+        @DisplayName("onReviewReceived notifies reviewee and sends email")
+        void onReviewReceived() {
+            Review review = Review.builder()
+                    .id(1L).task(task).reviewer(client).reviewee(worker)
+                    .rating(5).comment("Great!").build();
+
+            taskService.onReviewReceived(new ReviewReceivedEvent(review, client));
+
+            verify(notificationService).notifyReviewReceived(review);
+            verify(communicationService).sendReviewReceivedEmail(
+                    eq("rachid@test.ma"), eq("Rachid"), eq(5), eq("Khalid Mouhib"));
         }
     }
 }

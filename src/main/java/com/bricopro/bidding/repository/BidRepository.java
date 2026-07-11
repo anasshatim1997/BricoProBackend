@@ -29,6 +29,11 @@ public interface BidRepository extends JpaRepository<Bid, Long> {
 
     @Modifying
     @Transactional
+    @Query("UPDATE Bid b SET b.status = :status WHERE b.taskId = :taskId AND b.id <> :excludeBidId AND b.status = 'PENDING'")
+    void rejectOtherPendingBids(@Param("taskId") Long taskId, @Param("excludeBidId") Long excludeBidId, @Param("status") Bid.BidStatus status);
+
+    @Modifying
+    @Transactional
     @Query("UPDATE Bid b SET b.status = 'EXPIRED' WHERE b.status = 'PENDING' AND b.expiresAt < CURRENT_TIMESTAMP")
     void expirePendingBids();
 }

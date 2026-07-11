@@ -105,7 +105,7 @@ public class BiddingServiceImpl implements IBiddingService {
         task.setStatus(Task.TaskStatus.CONFIRMED);
         taskRepository.save(task);
         workerSnapshotService.captureOnAssignment(worker.getId(), task.getId());
-        bidRepository.updateStatusIfPending(bid.getId(), Bid.BidStatus.REJECTED);
+        bidRepository.rejectOtherPendingBids(task.getId(), bid.getId(), Bid.BidStatus.REJECTED);
     }
 
     @Override

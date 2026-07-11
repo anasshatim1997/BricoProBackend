@@ -17,6 +17,7 @@ import com.bricopro.user.entity.WorkerProfile;
 import com.bricopro.user.entity.WorkerProfile.ServiceType;
 import com.bricopro.user.repository.UserRepository;
 import com.bricopro.user.repository.WorkerProfileRepository;
+import com.bricopro.user.service.WorkerSnapshotService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -50,6 +51,7 @@ class AdminServiceTest {
     @Mock CommunicationService communicationService;
     @Mock NotificationService notificationService;
     @Mock TaskMapper taskMapper;
+    @Mock WorkerSnapshotService workerSnapshotService;
 
     @InjectMocks AdminService adminService;
 
@@ -79,8 +81,6 @@ class AdminServiceTest {
                 .cancellationReason("Client says work not done")
                 .build();
     }
-
-    // ─── VERIFY WORKER ────────────────────────────────────────────────────────
 
     @Nested
     @DisplayName("verifyWorker()")
@@ -115,8 +115,6 @@ class AdminServiceTest {
         }
     }
 
-    // ─── REJECT WORKER ────────────────────────────────────────────────────────
-
     @Nested
     @DisplayName("rejectWorker()")
     class RejectWorker {
@@ -138,8 +136,6 @@ class AdminServiceTest {
                     eq("yassine@test.ma"), eq("Yassine"), eq("CIN document blurry"));
         }
     }
-
-    // ─── SUSPEND USER ─────────────────────────────────────────────────────────
 
     @Nested
     @DisplayName("suspendUser()")
@@ -172,8 +168,6 @@ class AdminServiceTest {
         }
     }
 
-    // ─── REACTIVATE USER ──────────────────────────────────────────────────────
-
     @Nested
     @DisplayName("reactivateUser()")
     class ReactivateUser {
@@ -191,8 +185,6 @@ class AdminServiceTest {
             assertThat(clientUser.getStatus()).isEqualTo(Status.ACTIVE);
         }
     }
-
-    // ─── RESOLVE DISPUTE ──────────────────────────────────────────────────────
 
     @Nested
     @DisplayName("resolveDispute()")
@@ -247,8 +239,6 @@ class AdminServiceTest {
         }
     }
 
-    // ─── DELETE USER ──────────────────────────────────────────────────────────
-
     @Nested
     @DisplayName("deleteUser()")
     class DeleteUser {
@@ -265,8 +255,6 @@ class AdminServiceTest {
             assertThat(clientUser.getStatus()).isEqualTo(Status.DELETED);
         }
     }
-
-    // ─── ASSIGN TASK ──────────────────────────────────────────────────────────
 
     @Nested
     @DisplayName("assignTask()")
@@ -286,6 +274,7 @@ class AdminServiceTest {
             when(taskRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
             TaskResponse mockResponse = new TaskResponse();
             when(taskMapper.toResponse(any())).thenReturn(mockResponse);
+            doNothing().when(workerSnapshotService).captureOnAssignment(anyLong(), anyLong());
 
             AssignTaskRequest req = new AssignTaskRequest();
             req.setWorkerId(2L);
@@ -297,6 +286,7 @@ class AdminServiceTest {
             assertThat(searchingTask.getStatus()).isEqualTo(TaskStatus.CONFIRMED);
             assertThat(searchingTask.getAgreedPrice()).isEqualByComparingTo(BigDecimal.valueOf(250));
             verify(notificationService).notifyTaskAccepted(searchingTask);
+            verify(workerSnapshotService).captureOnAssignment(2L, 10L);
         }
 
         @Test
@@ -312,8 +302,6 @@ class AdminServiceTest {
                     .isInstanceOf(IllegalStateException.class);
         }
     }
-
-    // ─── LIST USERS ───────────────────────────────────────────────────────────
 
     @Nested
     @DisplayName("listUsers()")
@@ -341,8 +329,6 @@ class AdminServiceTest {
             assertThat(res.getTotalElements()).isEqualTo(1);
         }
     }
-
-    // ─── GET PENDING VERIFICATIONS ────────────────────────────────────────────
 
     @Test
     @DisplayName("getPendingVerifications() returns workers with unverified CIN")
